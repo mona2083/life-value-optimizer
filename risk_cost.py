@@ -1,6 +1,7 @@
 # risk_cost.py
 # 現実的コスト予測テーブル（月次・USD）
 # 医療費 = 保険でカバーされない自己負担分（コプレイ・免責）
+# horizon_years依存を廃止し固定値を使用
 
 MEDICAL = {
     "18-35": {"single": 50,  "couple": 100, "kids1": 150, "kids2": 200, "kids3": 250, "kids4": 300},
@@ -9,9 +10,9 @@ MEDICAL = {
     "66+":   {"single": 400, "couple": 800, "kids1": 850, "kids2": 900, "kids3": 950, "kids4": 1000},
 }
 
-HOUSING = {1: 20, 5: 50, 10: 80, 20: 120, 50: 120}
-
-CAR_REPAIR = {1: 30, 5: 80, 10: 150, 20: 150, 50: 150}
+# 固定値（中央値相当）
+HOUSING_DEFAULT   = 80
+CAR_REPAIR_DEFAULT = 80
 
 EDUCATION = {
     1:  {1: 100, 2: 180, 3: 250, 4: 320},
@@ -22,8 +23,8 @@ EDUCATION = {
 }
 
 EMERGENCY = [
-    (500,  30),
-    (1000, 60),
+    (500,   30),
+    (1000,  60),
     (2000, 100),
     (float("inf"), 150),
 ]
@@ -64,23 +65,37 @@ def get_emergency_cost(monthly_budget: int) -> int:
 def calculate_risk_costs(
     age: int,
     family: str,
-    horizon_years: int,
+    savings_period_years: int,
     monthly_budget: int,
     car_selected: bool,
 ) -> list[dict]:
+    """
+    savings_period_yearsは教育費の計算にのみ使用
+    住居修繕費・車の修理費は固定値（中央値）を使用
+    """
     age_band = get_age_band(age)
     family_key, num_kids = get_family_key(family)
     costs = []
 
-    costs.append({"category": "medical",   "monthly_cost": MEDICAL[age_band][family_key]})
-    costs.append({"category": "housing",   "monthly_cost": HOUSING[horizon_years]})
+    costs.append({"category": "medical",
+                  "monthly_cost": MEDICAL[age_band][family_key]})
+    costs.append({"category": "housing",
+                  "monthly_cost": HOUSING_DEFAULT})
 
     if car_selected:
-        costs.append({"category": "car_repair", "monthly_cost": CAR_REPAIR[horizon_years]})
+        costs.append({"category": "car_repair",
+                      "monthly_cost": CAR_REPAIR_DEFAULT})
 
     if num_kids > 0:
-        costs.append({"category": "education", "monthly_cost": EDUCATION[horizon_years][num_kids]})
+        # 教育費は貯蓄期間に依存
+        edu_key = min(savings_period_years, 20,
+                      key=lambda y: abs(y - savings_period_years))
+        valid_keys = [1, 5, 10, 20, 50]
+        edu_key = min(valid_keys, key=lambda y: abs(y - savings_period_years))
+        costs.append({"category": "education",
+                      "monthly_cost": EDUCATION[edu_key][num_kids]})
 
-    costs.append({"category": "emergency", "monthly_cost": get_emergency_cost(monthly_budget)})
+    costs.append({"category": "emergency",
+                  "monthly_cost": get_emergency_cost(monthly_budget)})
 
     return costs
