@@ -9,8 +9,7 @@
 
 ## 🌐 Live Demo
 
-> _[Streamlit Community Cloud URL — add after deployment]_
-
+> https://life-value-optimizer-mh.streamlit.app/
 ---
 
 ## 📌 What is this?
