@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import pandas as pd
 from optimizer import run_optimizer
@@ -9,29 +8,35 @@ from default_items import DEFAULT_ITEMS, CATEGORIES, CATEGORY_CONSTRAINTS
 from lifestyle import calculate_lifestyle_adjustments, INCOME_REASON_OPTIONS
 from risk_cost import calculate_risk_costs
 
+st.markdown("""
+<style>
+div[data-testid="stButton"] > button {
+    font-size: 0.7rem !important;
+    padding: 2px 10px !important;
+    height: auto !important;
+    line-height: 1.4 !important;
+    white-space: nowrap !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
-# ── ヘルパー関数 ──────────────────────────────────────
 
-def _build_category_df(lang: str, category: str, exclude_names: set = None) -> pd.DataFrame:
-    """カテゴリ別のデフォルトDataFrameを生成"""
-    name_key      = "name_ja" if lang == "ja" else "name_en"
-    note_key      = "note_ja" if lang == "ja" else "note_en"
-    exclude_names = exclude_names or set()
-
+def _build_category_df(lang: str, category: str) -> pd.DataFrame:
+    name_key = "name_ja" if lang == "ja" else "name_en"
+    note_key = "note_ja" if lang == "ja" else "note_en"
     rows = []
     for item in DEFAULT_ITEMS:
         if item["category"] != category:
             continue
-        name     = item[name_key]
-        priority = 0 if name in exclude_names else item.get("priority", 0)
         rows.append({
-            "name":         name,
+            "name":         item[name_key],
             "initial_cost": item["initial_cost"],
             "monthly_cost": item["monthly_cost"],
-            "time":         item["time"],
             "health":       item["health"],
-            "satisfaction": item["satisfaction"],
-            "priority":     priority,
+            "connections":  item["connections"],
+            "freedom":      item["freedom"],
+            "growth":       item["growth"],
+            "priority":     item.get("priority", 0),
             "mandatory":    False,
             "category":     item["category"],
             "note":         item.get(note_key, ""),
@@ -39,30 +44,22 @@ def _build_category_df(lang: str, category: str, exclude_names: set = None) -> p
     return pd.DataFrame(rows)
 
 
-def _init_all_category_dfs(lang: str, exclude_names: set = None) -> dict:
-    return {
-        cat: _build_category_df(lang, cat, exclude_names)
-        for cat in CATEGORIES[lang]
-    }
+def _init_all_category_dfs(lang: str) -> dict:
+    return {cat: _build_category_df(lang, cat) for cat in CATEGORIES[lang]}
 
 
 def _collect_all_items(lang: str) -> list[dict]:
-    """
-    session_stateのカテゴリDFから全アイテムを収集
-    編集済みコスト（session_state）を優先して使用
-    """
     items = []
     for category, df in st.session_state.category_dfs.items():
         for i, row in df.iterrows():
             items.append({
                 "name":         row["name"],
-                "initial_cost": int(st.session_state.get(
-                    f"initial_cost_{category}_{i}", int(row["initial_cost"]))),
-                "monthly_cost": int(st.session_state.get(
-                    f"monthly_cost_{category}_{i}", int(row["monthly_cost"]))),
-                "time":         int(row["time"]),
+                "initial_cost": int(st.session_state.get(f"initial_cost_{category}_{i}", int(row["initial_cost"]))),
+                "monthly_cost": int(st.session_state.get(f"monthly_cost_{category}_{i}", int(row["monthly_cost"]))),
                 "health":       int(row["health"]),
-                "satisfaction": int(row["satisfaction"]),
+                "connections":  int(row["connections"]),
+                "freedom":      int(row["freedom"]),
+                "growth":       int(row["growth"]),
                 "priority":     int(row["priority"]),
                 "mandatory":    bool(row["mandatory"]),
                 "category":     row["category"],
@@ -70,35 +67,23 @@ def _collect_all_items(lang: str) -> list[dict]:
     return items
 
 
-def _render_cost_summary(
-    items: list[dict],
-    total_budget: int,
-    effective_monthly_budget: int,
-    lang: str,
-) -> None:
-    """必須・候補アイテムの費用サマリーを表示"""
+def _render_cost_summary(items: list[dict], total_budget: int, effective_monthly_budget: int, lang: str) -> bool:
     T = LANG[lang]
     mandatory  = [item for item in items if item["mandatory"]]
     candidates = [item for item in items if item["priority"] > 0 or item["mandatory"]]
-
-    m_initial = sum(item["initial_cost"] for item in mandatory)
-    m_monthly = sum(item["monthly_cost"]  for item in mandatory)
-    c_initial = sum(item["initial_cost"] for item in candidates)
-    c_monthly = sum(item["monthly_cost"]  for item in candidates)
+    m_initial  = sum(item["initial_cost"] for item in mandatory)
+    m_monthly  = sum(item["monthly_cost"]  for item in mandatory)
+    c_initial  = sum(item["initial_cost"] for item in candidates)
+    c_monthly  = sum(item["monthly_cost"]  for item in candidates)
 
     st.subheader(T["mandatory_summary_title"])
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric(
-        T["must_initial"], f"${m_initial:,}",
-        delta=f"上限${total_budget:,}" if lang == "ja" else f"Limit${total_budget:,}",
-        delta_color="inverse" if m_initial > total_budget else "off",
-    )
-    col2.metric(
-        T["must_monthly"], f"${m_monthly:,}",
-        delta=f"予算${effective_monthly_budget:,}" if lang == "ja"
-              else f"Budget${effective_monthly_budget:,}",
-        delta_color="inverse" if m_monthly > effective_monthly_budget else "off",
-    )
+    col1.metric(T["must_initial"], f"${m_initial:,}",
+                delta=f"上限${total_budget:,}" if lang == "ja" else f"Limit${total_budget:,}",
+                delta_color="inverse" if m_initial > total_budget else "off")
+    col2.metric(T["must_monthly"], f"${m_monthly:,}",
+                delta=f"予算${effective_monthly_budget:,}" if lang == "ja" else f"Budget${effective_monthly_budget:,}",
+                delta_color="inverse" if m_monthly > effective_monthly_budget else "off")
     col3.metric(T["cand_initial"], f"${c_initial:,}")
     col4.metric(T["cand_monthly"], f"${c_monthly:,}")
 
@@ -110,14 +95,7 @@ def _render_cost_summary(
     return m_initial > total_budget or m_monthly > effective_monthly_budget
 
 
-def _render_recommendations(
-    all_items: list[dict],
-    result: dict,
-    effective_monthly_budget: int,
-    total_budget: int,
-    lang: str,
-) -> None:
-    """優先度順の未選択候補アイテムを推奨表示"""
+def _render_recommendations(all_items: list[dict], result: dict, effective_monthly_budget: int, total_budget: int, lang: str) -> None:
     T = LANG[lang]
     selected_names = {item["name"] for item in result["selected"]}
     car_chosen     = any("車メイン" in n or "Car (Primary)" in n for n in selected_names)
@@ -145,26 +123,18 @@ def _render_recommendations(
         shortfall_m = max(item["monthly_cost"] - remaining_monthly, 0)
         shortfall_i = max(item["initial_cost"] - remaining_initial, 0)
         label = (
-            f"優先度{item['priority']}: **{item['name']}**　"
-            f"初期${item['initial_cost']:,} / 月次${item['monthly_cost']:,}"
+            f"優先度{item['priority']}: **{item['name']}**　初期${item['initial_cost']:,} / 月次${item['monthly_cost']:,}"
             if lang == "ja" else
-            f"Priority {item['priority']}: **{item['name']}**　"
-            f"Initial${item['initial_cost']:,} / Monthly${item['monthly_cost']:,}"
+            f"Priority {item['priority']}: **{item['name']}**　Initial${item['initial_cost']:,} / Monthly${item['monthly_cost']:,}"
         )
         if shortfall_m == 0 and shortfall_i == 0:
             st.success(f"{label}　→ {T['rec_within_budget']}")
         else:
             parts = []
             if shortfall_m > 0:
-                parts.append(
-                    f"月次あと${shortfall_m:,}" if lang == "ja"
-                    else f"${shortfall_m:,}/month more"
-                )
+                parts.append(f"月次あと${shortfall_m:,}" if lang == "ja" else f"${shortfall_m:,}/month more")
             if shortfall_i > 0:
-                parts.append(
-                    f"初期費用あと${shortfall_i:,}" if lang == "ja"
-                    else f"${shortfall_i:,} more initial"
-                )
+                parts.append(f"初期費用あと${shortfall_i:,}" if lang == "ja" else f"${shortfall_i:,} more initial")
             suffix = "必要" if lang == "ja" else "needed"
             st.info(f"{label}　→ {' / '.join(parts)}{suffix}")
 
@@ -176,41 +146,37 @@ with st.sidebar:
 
 T = LANG[lang]
 
-# 言語切替時にデータを再初期化
 if "items_lang" not in st.session_state or st.session_state.items_lang != lang:
     st.session_state.items_lang    = lang
     st.session_state.category_dfs = _init_all_category_dfs(lang)
 
-# ── タイトル ──────────────────────────────────────────
 st.title(T["title"])
 st.caption(T["caption"])
 
-# ── Step 1: ユーザー属性・収入・固定費 ───────────────
+# ── Step 1 ────────────────────────────────────────────
 st.header(T["step1"])
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    age    = st.number_input(T["age"],    min_value=18, max_value=100, value=42)
+    age    = st.number_input(T["age"],   min_value=18, max_value=100, value=42)
 with col2:
-    gender = st.selectbox(T["gender"],    T["gender_options"])
+    gender = st.selectbox(T["gender"],   T["gender_options"])
 with col3:
-    family = st.selectbox(T["family"],    T["family_options"])
+    family = st.selectbox(T["family"],   T["family_options"])
 
 monthly_income = st.number_input(T["monthly_income"], min_value=0, value=4000, step=100)
 
 st.subheader(T["fixed_costs_title"])
 col_f1, col_f2, col_f3 = st.columns(3)
 with col_f1:
-    rent      = st.number_input(T["rent"],       min_value=0, value=1500, step=50)
-    utilities = st.number_input(T["utilities"],  min_value=0, value=150,  step=10)
+    rent      = st.number_input(T["rent"],      min_value=0, value=1500, step=50)
+    utilities = st.number_input(T["utilities"], min_value=0, value=150,  step=10)
 with col_f2:
-    internet  = st.number_input(T["internet"],   min_value=0, value=130,  step=10)
-    groceries = st.number_input(T["groceries"],  min_value=0, value=400,  step=50)
+    internet  = st.number_input(T["internet"],  min_value=0, value=130,  step=10)
+    groceries = st.number_input(T["groceries"], min_value=0, value=400,  step=50)
 with col_f3:
-    health_insurance_fixed = st.number_input(
-        T["health_insurance_fixed"], min_value=0, value=150, step=10)
-    other_fixed = st.number_input(
-        T["other_fixed"], min_value=0, value=0, step=50)
+    health_insurance_fixed = st.number_input(T["health_insurance_fixed"], min_value=0, value=150, step=10)
+    other_fixed            = st.number_input(T["other_fixed"],            min_value=0, value=0,   step=50)
 
 total_fixed       = rent + utilities + internet + groceries + health_insurance_fixed + other_fixed
 disposable_income = max(monthly_income - total_fixed, 0)
@@ -218,22 +184,17 @@ disposable_income = max(monthly_income - total_fixed, 0)
 st.metric(
     T["disposable_income"],
     f"${disposable_income:,}",
-    delta=(
-        f"収入${monthly_income:,} − 固定費${total_fixed:,}"
-        if lang == "ja" else
-        f"Income${monthly_income:,} − Fixed${total_fixed:,}"
-    ),
+    delta=(f"収入${monthly_income:,} − 固定費${total_fixed:,}" if lang == "ja"
+           else f"Income${monthly_income:,} − Fixed${total_fixed:,}"),
     delta_color="off",
     help=T["disposable_income_help"],
 )
 
-total_budget = st.number_input(
-    T["total_budget"], min_value=0, value=5000, step=500, help=T["total_budget_help"]
-)
+total_budget = st.number_input(T["total_budget"], min_value=0, value=5000, step=500, help=T["total_budget_help"])
 
 st.divider()
 
-# ── Step 2: 目標設定 ──────────────────────────────────
+# ── Step 2 ────────────────────────────────────────────
 st.header(T["step2"])
 
 col6, col7 = st.columns(2)
@@ -249,30 +210,23 @@ st.subheader(T["priority"])
 goal_preset = st.radio(T["goal_type"], T["goal_options"], horizontal=True)
 preset      = PRESETS[lang][goal_preset]
 
-col8, col9, col10, col11 = st.columns(4)
+col8, col9, col10, col11, col12 = st.columns(5)
 with col8:
-    w_time         = st.slider(T["w_time"],         1, 10, preset["time"])
+    w_health      = st.slider(T["w_health"],      1, 10, preset["health"])
 with col9:
-    w_health       = st.slider(T["w_health"],       1, 10, preset["health"])
+    w_connections = st.slider(T["w_connections"], 1, 10, preset["connections"])
 with col10:
-    w_satisfaction = st.slider(T["w_satisfaction"], 1, 10, preset["satisfaction"])
+    w_freedom     = st.slider(T["w_freedom"],     1, 10, preset["freedom"])
 with col11:
-    w_savings      = st.slider(T["w_savings"],      1, 10, preset["savings"])
+    w_growth      = st.slider(T["w_growth"],      1, 10, preset["growth"])
+with col12:
+    w_savings     = st.slider(T["w_savings"],     1, 10, preset["savings"])
 
 st.divider()
 
-# ── Step 2.5: ライフスタイル設定 ──────────────────────
+# ── Step 2.5 ──────────────────────────────────────────
 st.header(T["step_lifestyle"])
 
-col_ls1, col_ls2 = st.columns(2)
-with col_ls1:
-    diet     = st.selectbox(T["diet_label"],     T["diet_options"])
-    exercise = st.selectbox(T["exercise_label"], T["exercise_options"])
-with col_ls2:
-    smoking  = st.selectbox(T["smoking_label"],  T["smoking_options"])
-    alcohol  = st.selectbox(T["alcohol_label"],  T["alcohol_options"])
-
-st.subheader(T["income_title"])
 col_inc1, col_inc2, col_inc3 = st.columns(3)
 with col_inc1:
     income_increase = st.number_input(T["income_increase"], min_value=0, value=0, step=50)
@@ -282,10 +236,6 @@ with col_inc3:
     income_reason   = st.selectbox(T["income_reason"], INCOME_REASON_OPTIONS[lang])
 
 lifestyle_adj = calculate_lifestyle_adjustments({
-    "diet":            diet,
-    "exercise":        exercise,
-    "smoking":         smoking,
-    "alcohol":         alcohol,
     "income_increase": income_increase,
     "income_years":    income_years,
     "income_reason":   income_reason,
@@ -293,26 +243,12 @@ lifestyle_adj = calculate_lifestyle_adjustments({
     "savings_years":   savings_period_years,
 }, lang)
 
-col_adj1, col_adj2 = st.columns(2)
-col_adj1.metric(T["lifestyle_diet_note"],   f"${lifestyle_adj['diet_cost_adjustment']:+,}")
-col_adj2.metric(T["lifestyle_health_note"], f"{lifestyle_adj['health_score_adjustment']:+} pt")
-
 if lifestyle_adj["future_note"]:
     st.info(lifestyle_adj["future_note"])
 
-# ライフスタイルに応じてアイテムを自動除外
-exclude_names = lifestyle_adj["exclude_names"]
-for cat, df in st.session_state.category_dfs.items():
-    for i, row in df.iterrows():
-        if row["name"] in exclude_names:
-            st.session_state.category_dfs[cat].at[i, "priority"] = 0
-            key = f"priority_{cat}_{i}"
-            if key in st.session_state:
-                st.session_state[key] = 0
-
 st.divider()
 
-# ── Step 3: アイテム選択（タブ形式）─────────────────
+# ── Step 3 ────────────────────────────────────────────
 st.header(T["step3"])
 st.caption(T["step3_caption"])
 
@@ -328,18 +264,37 @@ for tab, category in zip(tabs, CATEGORIES[lang].keys()):
         df = st.session_state.category_dfs[category]
         st.caption(constraint_label)
 
-        # ヘッダー行
-        h = st.columns([1, 1, 3, 2, 2, 1, 1, 1, 2])
+        col_da, col_aa, _ = st.columns([1, 1, 5])
+        with col_da:
+            st.markdown('<div class="small-btn">', unsafe_allow_html=True)
+            if st.button(T["deactivate_all"], key=f"deact_{category}"):
+                for i in range(len(df)):
+                    st.session_state.category_dfs[category].at[i, "priority"] = 0
+                    st.session_state[f"priority_{category}_{i}"] = 0
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+        with col_aa:
+            st.markdown('<div class="small-btn">', unsafe_allow_html=True)
+            if st.button(T["activate_all"], key=f"act_{category}"):
+                name_key    = "name_ja" if lang == "ja" else "name_en"
+                default_map = {item[name_key]: item.get("priority", 1) for item in DEFAULT_ITEMS if item["category"] == category}
+                for i, row in df.iterrows():
+                    p = default_map.get(row["name"], 1)
+                    st.session_state.category_dfs[category].at[i, "priority"] = p
+                    st.session_state[f"priority_{category}_{i}"] = p
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        h = st.columns([1, 1, 3, 2, 2, 1, 1, 1, 1, 2])
         for col, label in zip(h, [
             T["col_priority"], T["col_mandatory"], T["col_name"],
             T["col_initial"], T["col_monthly"],
-            T["col_time"], T["col_health"], T["col_satisfaction"],
+            T["col_health"], T["col_connections"], T["col_freedom"], T["col_growth"],
             T["col_note"],
         ]):
             col.caption(label)
         st.divider()
 
-        # アイテム行
         for i, row in df.iterrows():
             _p_key  = f"priority_{category}_{i}"
             _m_key  = f"mandatory_{category}_{i}"
@@ -355,30 +310,18 @@ for tab, category in zip(tabs, CATEGORIES[lang].keys()):
                 if key not in st.session_state:
                     st.session_state[key] = default
 
-            r = st.columns([1, 1, 3, 2, 2, 1, 1, 1, 2])
-
-            priority     = r[0].number_input(
-                "", min_value=0, max_value=99,
-                key=_p_key, label_visibility="collapsed", step=1,
-            )
-            mandatory    = r[1].checkbox(
-                "", key=_m_key, label_visibility="collapsed",
-            )
+            r = st.columns([1, 1, 3, 2, 2, 1, 1, 1, 1, 2])
+            priority     = r[0].number_input("", min_value=0, max_value=99, key=_p_key,  label_visibility="collapsed", step=1)
+            mandatory    = r[1].checkbox("",                                key=_m_key,  label_visibility="collapsed")
             r[2].write(row["name"])
-            initial_cost = r[3].number_input(
-                "", min_value=0, key=_ic_key,
-                label_visibility="collapsed", step=50,
-            )
-            monthly_cost = r[4].number_input(
-                "", min_value=0, key=_mc_key,
-                label_visibility="collapsed", step=10,
-            )
-            r[5].write(str(int(row["time"])))
-            r[6].write(str(int(row["health"])))
-            r[7].write(str(int(row["satisfaction"])))
-            r[8].caption(str(row.get("note", "")))
+            initial_cost = r[3].number_input("", min_value=0,               key=_ic_key, label_visibility="collapsed", step=50)
+            monthly_cost = r[4].number_input("", min_value=0,               key=_mc_key, label_visibility="collapsed", step=10)
+            r[5].write(str(int(row["health"])))
+            r[6].write(str(int(row["connections"])))
+            r[7].write(str(int(row["freedom"])))
+            r[8].write(str(int(row["growth"])))
+            r[9].caption(str(row.get("note", "")))
 
-            # DataFrameを即時更新
             st.session_state.category_dfs[category].at[i, "priority"]     = priority
             st.session_state.category_dfs[category].at[i, "mandatory"]    = mandatory
             st.session_state.category_dfs[category].at[i, "initial_cost"] = initial_cost
@@ -386,7 +329,6 @@ for tab, category in zip(tabs, CATEGORIES[lang].keys()):
 
         st.divider()
 
-        # LLM補完（カテゴリごと）
         col_ai1, col_ai2 = st.columns([3, 1])
         with col_ai1:
             ai_name = st.text_input(
@@ -405,17 +347,17 @@ for tab, category in zip(tabs, CATEGORIES[lang].keys()):
                         "name":         ai_name,
                         "initial_cost": defaults.get("initial_cost", 0),
                         "monthly_cost": defaults.get("monthly_cost", 0),
-                        "time":         defaults.get("time", 5),
                         "health":       defaults.get("health", 5),
-                        "satisfaction": defaults.get("satisfaction", 5),
+                        "connections":  defaults.get("connections", 5),
+                        "freedom":      defaults.get("freedom", 5),
+                        "growth":       defaults.get("growth", 5),
                         "priority":     1,
                         "mandatory":    False,
                         "category":     category,
                         "note":         "",
                     }])
                     st.session_state.category_dfs[category] = pd.concat(
-                        [st.session_state.category_dfs[category], new_row],
-                        ignore_index=True,
+                        [st.session_state.category_dfs[category], new_row], ignore_index=True
                     )
                     for key, val in [
                         (f"priority_{category}_{new_idx}",     1),
@@ -438,7 +380,6 @@ if use_risk:
     st.subheader(T["risk_title"])
     st.caption(T["risk_caption"])
 
-    # 車メインが候補・必須に入っているか確認
     transport_df = st.session_state.category_dfs.get("transport", pd.DataFrame())
     car_selected = any(
         ("車メイン" in str(row.get("name", "")) or "Car (Primary)" in str(row.get("name", "")))
@@ -455,75 +396,47 @@ if use_risk:
     )
 
     risk_df = pd.DataFrame([
-        {
-            T["risk_col_category"]: T["risk_categories"][c["category"]],
-            T["risk_col_cost"]:     c["monthly_cost"],
-        }
+        {T["risk_col_category"]: T["risk_categories"][c["category"]], T["risk_col_cost"]: c["monthly_cost"]}
         for c in raw_costs
     ])
 
-    edited_risk_df = st.data_editor(
-        risk_df, num_rows="fixed",
-        use_container_width=True,
-        key="risk_editor",
-    )
+    edited_risk_df       = st.data_editor(risk_df, num_rows="fixed", use_container_width=True, key="risk_editor")
+    total_risk           = int(edited_risk_df[T["risk_col_cost"]].sum())
+    effective_monthly_budget = max(int(lifestyle_adj["future_monthly_budget"]) - total_risk, 0)
 
-    total_risk = int(edited_risk_df[T["risk_col_cost"]].sum())
-    effective_monthly_budget = max(
-        int(lifestyle_adj["future_monthly_budget"]) - total_risk, 0
-    )
-
-    st.metric(
-        T["risk_effective"],
-        f"${effective_monthly_budget:,}",
-        delta=f"-${total_risk:,}",
-        delta_color="inverse",
-    )
+    st.metric(T["risk_effective"], f"${effective_monthly_budget:,}", delta=f"-${total_risk:,}", delta_color="inverse")
 
 st.divider()
 
-# ── 費用サマリー & バリデーション（ボタン上）─────────
-preview_items  = _collect_all_items(lang)
-has_error      = _render_cost_summary(
-    preview_items, int(total_budget), effective_monthly_budget, lang
-)
+# ── 費用サマリー ──────────────────────────────────────
+preview_items = _collect_all_items(lang)
+_render_cost_summary(preview_items, int(total_budget), effective_monthly_budget, lang)
 
 # ── 最適化実行 ────────────────────────────────────────
 if st.button(T["run_button"], type="primary"):
 
     all_items = _collect_all_items(lang)
-
-    # ライフスタイル補正を健康スコアに反映
-    health_adj = lifestyle_adj["health_score_adjustment"]
-    all_items = [
-        {**item, "health": max(-10, min(10, item["health"] + health_adj))}
-        for item in all_items
-    ]
-
-    weights = {
-        "time":         w_time,
-        "health":       w_health,
-        "satisfaction": w_satisfaction,
-        "savings":      w_savings,
+    weights   = {
+        "health":      w_health,
+        "connections": w_connections,
+        "freedom":     w_freedom,
+        "growth":      w_growth,
+        "savings":     w_savings,
     }
 
-    # バリデーション
     mandatory_items = [item for item in all_items if item["mandatory"]]
     transport_cands = [
         item for item in all_items
-        if item["category"] == "transport"
-        and (item["priority"] > 0 or item["mandatory"])
+        if item["category"] == "transport" and (item["priority"] > 0 or item["mandatory"])
     ]
 
     errors = []
     if sum(item["initial_cost"] for item in mandatory_items) > int(total_budget):
         errors.append(T["validation_initial_over"].format(
-            sum(item["initial_cost"] for item in mandatory_items), int(total_budget)
-        ))
+            sum(item["initial_cost"] for item in mandatory_items), int(total_budget)))
     if sum(item["monthly_cost"] for item in mandatory_items) > effective_monthly_budget:
         errors.append(T["validation_monthly_over"].format(
-            sum(item["monthly_cost"] for item in mandatory_items), effective_monthly_budget
-        ))
+            sum(item["monthly_cost"] for item in mandatory_items), effective_monthly_budget))
     if not transport_cands:
         st.warning(T["validation_no_transport"])
 
@@ -550,7 +463,6 @@ if st.button(T["run_button"], type="primary"):
         if result["status"] == "ok":
             st.success(T["result_ok"])
 
-            # AIサマリー
             with st.spinner("AI..."):
                 summary = get_result_summary(
                     result=result,
@@ -566,17 +478,15 @@ if st.button(T["run_button"], type="primary"):
             if lifestyle_adj["future_note"]:
                 st.caption(lifestyle_adj["future_note"])
 
-            # メトリクス
-            col12, col13, col14, col15 = st.columns(4)
-            col12.metric(T["total_initial"],  f"${result['total_initial_cost']:,}")
-            col13.metric(T["total_monthly"],  f"${result['total_monthly_cost']:,}")
-            col14.metric(T["actual_savings"], f"${result['actual_monthly_savings']:,}")
-            col15.metric(T["savings_rate"],   f"{result['savings_rate']:.0%}")
+            col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+            col_r1.metric(T["total_initial"],  f"${result['total_initial_cost']:,}")
+            col_r2.metric(T["total_monthly"],  f"${result['total_monthly_cost']:,}")
+            col_r3.metric(T["actual_savings"], f"${result['actual_monthly_savings']:,}")
+            col_r4.metric(T["savings_rate"],   f"{result['savings_rate']:.0%}")
 
             if result["savings_shortfall"] > 0:
                 st.warning(T["shortfall_warn"].format(result["savings_shortfall"]))
 
-            # 選ばれたアイテム一覧（カテゴリ別）
             st.subheader(T["selected_items"])
             if result["selected"]:
                 selected_by_cat: dict[str, list] = {}
@@ -586,24 +496,20 @@ if st.button(T["run_button"], type="primary"):
                 for cat, cat_items in selected_by_cat.items():
                     st.markdown(f"**{CATEGORIES[lang].get(cat, cat)}**")
                     cat_df = pd.DataFrame(cat_items)[
-                        ["name", "initial_cost", "monthly_cost",
-                         "time", "health", "satisfaction"]
+                        ["name", "initial_cost", "monthly_cost", "health", "connections", "freedom", "growth"]
                     ].rename(columns={
                         "name":         T["col_name"],
                         "initial_cost": T["col_initial"],
                         "monthly_cost": T["col_monthly"],
-                        "time":         T["col_time"],
                         "health":       T["col_health"],
-                        "satisfaction": T["col_satisfaction"],
+                        "connections":  T["col_connections"],
+                        "freedom":      T["col_freedom"],
+                        "growth":       T["col_growth"],
                     })
                     st.dataframe(cat_df, use_container_width=True, hide_index=True)
 
-            # 推奨アクション
-            _render_recommendations(
-                all_items, result, effective_monthly_budget, int(total_budget), lang
-            )
+            _render_recommendations(all_items, result, effective_monthly_budget, int(total_budget), lang)
 
-            # 感度分析グラフ
             st.header(T["sensitivity_title"])
             tab_m, tab_i = st.tabs([T["tab_monthly"], T["tab_initial"]])
 
