@@ -69,7 +69,7 @@ The optimizer finds the combination that **maximizes your total life value**, no
 
 ## The Optimization Model
 
-For each item $i$, a binary decision variable $x_i \in \{0,1\}$ is created. The solver maximizes:
+For each item $i$, a binary decision variable $xi \in \{0,1\}$ is created. The solver maximizes:
 
 $$\text{Maximize} \sum_i x_i \cdot u_i + \text{savings\_value}$$
 
@@ -144,8 +144,5 @@ streamlit run app.py
 🌺 Honolulu, Hawaii  
 🔗 [Portfolio](https://mona2083.github.io/portfolio-2026/index.html) | [GitHub](https://github.com/mona2083) | [LinkedIn](https://www.linkedin.com/in/manami-oyama/)
 
----
-
-## License
 
 MIT License — free to use
