@@ -1,5 +1,7 @@
 LANG = {
     "ja": {
+        "portfolio_btn":            "🔗 ポートフォリオを見る",
+        "portfolio_label":          "ポートフォリオ",
         "title":                   "💰 The Life-Value Optimizer",
         "caption":                 "限られた予算で、人生の質を最大化する",
         "step1":                   "Step 1: あなたについて",
@@ -97,6 +99,8 @@ LANG = {
         "chart_line_title_i":      "初期費用上限 vs 合計バリュー",
     },
     "en": {
+        "portfolio_btn":            "🔗 View Portfolio",
+        "portfolio_label":          "Portfolio",
         "title":                   "💰 The Life-Value Optimizer",
         "caption":                 "Maximize your life quality within a limited budget",
         "step1":                   "Step 1: About You",

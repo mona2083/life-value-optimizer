@@ -8,6 +8,10 @@ from default_items import DEFAULT_ITEMS, CATEGORIES, CATEGORY_CONSTRAINTS
 from lifestyle import calculate_lifestyle_adjustments, INCOME_REASON_OPTIONS
 from risk_cost import calculate_risk_costs
 
+st.set_page_config(page_title="Life-Value Optimizer", layout="wide")
+
+PORTFOLIO_URL = "https://mona2083.github.io/portfolio-2026/index.html"
+
 st.markdown("""
 <style>
 div[data-testid="stButton"] > button {
@@ -146,12 +150,20 @@ with st.sidebar:
 
 T = LANG[lang]
 
+with st.sidebar:
+    st.link_button(T["portfolio_btn"], PORTFOLIO_URL, use_container_width=True)
+    st.divider()
+
 if "items_lang" not in st.session_state or st.session_state.items_lang != lang:
     st.session_state.items_lang    = lang
     st.session_state.category_dfs = _init_all_category_dfs(lang)
 
-st.title(T["title"])
-st.caption(T["caption"])
+head_l, head_r = st.columns([0.78, 0.22], vertical_alignment="center")
+with head_l:
+    st.title(T["title"])
+    st.caption(T["caption"])
+with head_r:
+    st.link_button(T["portfolio_label"], PORTFOLIO_URL, use_container_width=True)
 
 # ── Step 1 ────────────────────────────────────────────
 st.header(T["step1"])
