@@ -1,167 +1,85 @@
-# 💰 The Life-Value Optimizer
+# 💰 Life-Value Optimizer
 
-**Maximize your life quality within a limited budget — powered by AI + Mathematical Optimization**
+> Maximize your life quality within a limited budget — powered by AI + Mathematical Optimization.
 
-> A portfolio project by **Manami Oyama** | AI Engineer / Data Scientist  
-> Built for CPT job search (Data Science / AI Engineering roles)
-
----
-
-## 🌐 Live Demo
-
-> https://life-value-optimizer-mh.streamlit.app/
----
-
-## 📌 What is this?
-
-The Life-Value Optimizer is a **full-stack AI web application** that helps users find the optimal combination of lifestyle spending — gym, Netflix, travel fund, bicycle, and more — within a real monthly budget.
-
-Unlike a simple budget tracker, this app treats spending as **investment decisions**:
-
-- A bicycle isn't just "$500" — it saves time, builds health, and brings satisfaction.
-- Savings aren't just "leftover money" — they compete directly with other items for priority.
-- Your lifestyle habits (diet, exercise, smoking) affect the health scores of every item.
-
-The optimizer finds the combination that **maximizes your total life value**, not just minimizes your spending.
+A Streamlit app that finds the optimal combination of lifestyle spending — gym, travel fund, bicycle, subscriptions, and more — within your real monthly budget. Unlike a simple budget tracker, this app treats every expense as an **investment decision** and mathematically proves the best allocation.
 
 ---
 
-## 🎯 Why This Project
+## Live Demo
 
-This app demonstrates the **PM × Data Science × AI Engineering** skill stack required for real-world AI product roles:
-
-| Skill | Demonstrated by |
-|---|---|
-| **Problem formulation** | Translating "what makes life better" into a mathematical model |
-| **Mathematical optimization** | OR-Tools CP-SAT solver with custom utility functions |
-| **LLM integration** | Gemini API for item auto-fill and result summaries |
-| **Full-stack Python** | Streamlit UI with session state management |
-| **Product thinking** | User-centered UX, progressive disclosure, sensible defaults |
-| **Bilingual UX** | Full Japanese / English language support |
+🔗 [Open App](https://life-value-optimizer-mh.streamlit.app/)
 
 ---
 
-## 🏗️ Architecture
+## The Problem It Solves
 
-```
-┌─────────────────────────────────────────┐
-│              Streamlit UI               │
-│   app.py  ←→  lang.py (i18n)           │
-└────────────┬────────────────────────────┘
-             │
-     ┌───────┴────────┐
-     │                │
-┌────▼─────┐   ┌──────▼──────┐
-│optimizer │   │  llm.py     │
-│  .py     │   │  Gemini API │
-│ OR-Tools │   └─────────────┘
-└────┬─────┘
-     │
-┌────▼──────────┐  ┌──────────────┐  ┌──────────────┐
-│sensitivity.py │  │ lifestyle.py │  │ risk_cost.py │
-│ (what-if      │  │ (health adj) │  │ (future cost │
-│  analysis)    │  │              │  │  prediction) │
-└───────────────┘  └──────────────┘  └──────────────┘
-             │
-┌────────────▼──────────┐
-│   default_items.py    │
-│ (50+ items, 9 categ.) │
-└───────────────────────┘
-```
+Most budgeting tools just track spending. This app answers a harder question: **given your income, goals, and values — what should you actually spend money on?**
+
+- A bicycle isn't just "$500" — it saves commute time, builds health, and brings satisfaction
+- Savings aren't just "leftover money" — they compete directly with other items for priority
+- Your lifestyle habits (diet, exercise) affect the health scores of every item you select
+
+The optimizer finds the combination that **maximizes your total life value**, not just minimizes spending.
 
 ---
 
-## 🧮 The Optimization Model
+## Features
 
-### Decision Variables
+### Step 1 — Profile & Fixed Costs
+- Monthly income → auto-calculates disposable income after fixed costs (rent, utilities, groceries, insurance)
+- Household structure, age, and lifestyle inputs
 
-For each item $i$: $x_i \in \{0, 1\}$ (select or not)
-
-### Objective Function
-
-$$\text{Maximize} \sum_i x_i \cdot u_i + \text{savings\_value}$$
-
-Where item utility is:
-
-$$u_i = \left( w_{time} \cdot time_i + w_{health} \cdot (health_i + 10) + w_{satisfaction} \cdot satisfaction_i \right) \times p_i$$
-
-And priority bonus uses **rank percentile normalization**:
-
-$$p_i = 2.0 - \frac{\text{rank}(priority_i)}{|\text{unique priorities}| - 1}$$
-
-This means priority=1 items get 2.0× weight, lowest priority items get 1.0× — **without any hardcoded thresholds**, adapting dynamically to whatever priorities the user enters.
-
-Savings utility competes directly with items:
-
-$$\text{savings\_value} = \text{actual\_savings} \times \frac{\sum u_i \cdot w_{savings}}{10 \times \text{budget}}$$
-
-When `w_savings=10`, fully saving the budget is worth as much as selecting all items. When `w_savings=1`, items dominate.
-
-### Constraints
-
-| Constraint | Description |
-|---|---|
-| $\sum x_i \cdot \text{initial\_cost}_i \leq B_{initial}$ | One-time budget limit |
-| $\sum x_i \cdot \text{monthly\_cost}_i \leq B_{monthly}$ | Monthly disposable income |
-| $\sum_{i \in transport} x_i = 1$ | Exactly one transport package |
-| $x_{pet\_insurance} \leq x_{pet}$ | Pet insurance requires pet |
-| $x_{car\_insurance} \leq x_{car}$ | Car insurance requires car |
-| $x_i = 1$ for mandatory items | User-forced selections |
-
----
-
-## 🗂️ Features
-
-### Step 1 — Your Profile & Fixed Costs
-- Age, gender, household structure
-- Monthly income → auto-calculates disposable income after fixed costs
-- Fixed costs: rent, utilities, internet/phone, groceries, health insurance
-
-### Step 2 — Goals & Priorities
+### Step 2 — Goals & Value Weights
 - Savings goal (e.g. "$5,000 in 2 years" → $208/month target)
-- Value weights: Time Saving / Health / Satisfaction / Savings (1–10 sliders)
-- Presets: "Stay Healthy", "Save Money", "Live Comfortably", "Custom"
+- Four value axes: Time Saving / Health / Satisfaction / Savings (1–10 sliders)
+- Presets: 今を豊かに生きる / 将来に備える / 健康に長生きする / 自己成長・キャリア / Custom
 
-### Step 2.5 — Lifestyle Settings
-- Diet preference → adjusts food cost and health scores
-- Exercise frequency, smoking, alcohol → adjusts health scores across all items
-- Future income projection → raises effective budget within savings period
-
-### Step 3 — Item Selection (9 categories, 50+ items)
-- Transport as **packages** (Car / E-Bike+Uber / Bicycle Only / etc.)
-- Priority input (1 = top priority, same number = same weight)
-- Mandatory checkbox (force-include any item)
-- Cost editing (override defaults with your real costs)
-- AI auto-fill: type any item name → Gemini suggests costs and scores
+### Step 3 — Item Selection
+- 50+ items across 9 categories with editable costs and priority scores
+- Transport as **packages** — mutually exclusive (Car / E-Bike+Uber / Bicycle Only / etc.)
+- Mandatory checkbox to force-include any item
+- **AI auto-fill**: type any item name → Gemini suggests costs and scores automatically
 
 ### Results
-- AI summary (Gemini) in natural language
-- Selected items grouped by category
-- Savings rate vs. goal
-- Next-best recommendations (top 5 unselected by priority)
-- Sensitivity analysis: how total value changes as budget increases
+- AI-generated summary in natural language (Gemini)
+- Selected items grouped by category with total cost breakdown
+- Savings rate vs. savings goal
+- Top 5 next-best unselected items
+- Budget sensitivity analysis — how total value changes as budget increases
 
-### Risk Cost Estimation (optional)
-- Medical out-of-pocket, housing repair, car repair, education, emergency fund
-- Based on age, household, car ownership
+### Risk Cost Estimation
+- Medical, housing repair, car repair, education, emergency fund
+- Calculated from age, household structure, and car ownership
 - Fully editable
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
-| Layer | Technology |
+| Component | Technology |
 |---|---|
-| **UI** | Streamlit |
-| **Optimization** | Google OR-Tools (CP-SAT solver) |
-| **LLM** | Google Gemini 2.5 Flash Lite API |
-| **Visualization** | Plotly |
-| **Language** | Python 3.12 |
-| **i18n** | Custom dictionary-based (Japanese / English) |
+| UI | `streamlit` |
+| Optimization | `ortools` CP-SAT (Google OR-Tools) |
+| LLM | Google Gemini 2.5 Flash Lite API (`google-genai`) |
+| Visualization | `plotly` |
+| i18n | Custom dictionary-based (Japanese / English) |
 
 ---
 
-## 📁 File Structure
+## The Optimization Model
+
+For each item $i$, a binary decision variable $x_i \in \{0,1\}$ is created. The solver maximizes:
+
+$$\text{Maximize} \sum_i x_i \cdot u_i + \text{savings\_value}$$
+
+Where item utility combines four value axes with priority-weighted bonuses, and savings utility competes directly with items — making the trade-off between spending and saving mathematically explicit.
+
+**Hard constraints** include budget limits (one-time + monthly), exactly one transport package, and dependency constraints (pet insurance requires pet, car insurance requires car).
+
+---
+
+## Project Structure
 
 ```
 life-value-optimizer/
@@ -170,9 +88,9 @@ life-value-optimizer/
 ├── sensitivity.py      # What-if analysis (budget sensitivity)
 ├── llm.py              # Gemini API (item auto-fill + summary)
 ├── lang.py             # Bilingual text dictionary (ja/en)
-├── default_items.py    # 50+ items across 9 categories with defaults
+├── default_items.py    # 50+ items across 9 categories
 ├── lifestyle.py        # Lifestyle-based score adjustments
-├── risk_cost.py        # Future risk cost estimation tables
+├── risk_cost.py        # Future risk cost estimation
 ├── requirements.txt
 └── .streamlit/
     └── secrets.toml    # GEMINI_API_KEY (not committed)
@@ -180,7 +98,7 @@ life-value-optimizer/
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Python 3.12+
@@ -189,10 +107,10 @@ life-value-optimizer/
 ### Installation
 
 ```bash
-git clone https://github.com/your-username/life-value-optimizer.git
+git clone https://github.com/mona2083/life-value-optimizer.git
 cd life-value-optimizer
-python3 -m venv .venv
-source .venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -212,42 +130,22 @@ streamlit run app.py
 
 ---
 
-## 📦 Requirements
+## Security Notes
 
-```
-streamlit
-ortools
-google-genai
-plotly
-pandas
-numpy
-```
-
----
-
-## 🔒 Security Notes
-
-- API keys are stored in `.streamlit/secrets.toml` (gitignored)
+- API keys are stored in `.streamlit/secrets.toml` (gitignored — never committed)
 - No user data is persisted (session-only)
 - Gemini free tier: 1,500 requests/day — sufficient for demo use
 
 ---
 
-## 👩‍💻 About the Author
+## Author
 
-**Manami Oyama**  
-AI Engineer / Data Scientist / PM  
-📍 Honolulu, Hawaii  
-🎓 KCC (CPT eligible)
-
-- 4 years Data Science
-- 2 years AI Engineering  
-- 3 years Web Development
-
-Currently seeking CPT part-time positions in Data Science / AI Engineering.
+**Manami Oyama** — AI Engineer / Product Manager  
+🌺 Honolulu, Hawaii  
+🔗 [Portfolio](https://mona2083.github.io/portfolio-2026/index.html) | [GitHub](https://github.com/mona2083) | [LinkedIn](https://www.linkedin.com/in/manami-oyama/)
 
 ---
 
-## 📄 License
+## License
 
-MIT License — free to use, modify, and distribute.
+MIT License — free to use
