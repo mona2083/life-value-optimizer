@@ -97,6 +97,7 @@ LANG = {
         "chart_initial_x":         "初期費用上限 ($)",
         "chart_line_title_m":      "月次予算 vs 合計バリュー",
         "chart_line_title_i":      "初期費用上限 vs 合計バリュー",
+        "portfolio_btn":           "← ポートフォリオ",
     },
     "en": {
         "portfolio_btn":            "🔗 View Portfolio",
@@ -196,6 +197,7 @@ LANG = {
         "chart_initial_x":         "Initial Cost Limit ($)",
         "chart_line_title_m":      "Monthly Budget vs Total Value",
         "chart_line_title_i":      "Initial Cost Limit vs Total Value",
+        "portfolio_btn":           "Portfolio",
     }
 }
 

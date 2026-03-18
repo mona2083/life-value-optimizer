@@ -151,7 +151,7 @@ with st.sidebar:
 T = LANG[lang]
 
 with st.sidebar:
-    st.link_button(T["portfolio_btn"], PORTFOLIO_URL, use_container_width=True)
+    st.link_button(T["portfolio_btn"], PORTFOLIO_URL)
     st.divider()
 
 if "items_lang" not in st.session_state or st.session_state.items_lang != lang:
