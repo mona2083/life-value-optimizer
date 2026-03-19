@@ -1,121 +1,106 @@
 import streamlit as st
 import pandas as pd
+
 from optimizer import run_optimizer
 from sensitivity import run_sensitivity, make_line_chart
 from llm import get_item_defaults, get_result_summary
-from lang import LANG, PRESETS
+from lang import PRESETS
 from default_items import DEFAULT_ITEMS, CATEGORIES, CATEGORY_CONSTRAINTS
 from lifestyle import calculate_lifestyle_adjustments, INCOME_REASON_OPTIONS
 from risk_cost import calculate_risk_costs
 
-import ui as ui_mod
-
-st.set_page_config(page_title="Life-Value Optimizer", layout="wide")
-
-PORTFOLIO_URL = "https://mona2083.github.io/portfolio-2026/index.html"
-
-st.markdown("""
-<style>
-div[data-testid="stButton"] > button {
-    font-size: 0.7rem !important;
-    padding: 2px 10px !important;
-    height: auto !important;
-    line-height: 1.4 !important;
-    white-space: nowrap !important;
-}
-</style>
-""", unsafe_allow_html=True)
-
-
-def _build_category_df(lang: str, category: str) -> pd.DataFrame:
-    name_key = "name_ja" if lang == "ja" else "name_en"
-    note_key = "note_ja" if lang == "ja" else "note_en"
-    rows = []
-    for item in DEFAULT_ITEMS:
-        if item["category"] != category:
-            continue
-        rows.append({
-            "name":         item[name_key],
-            "initial_cost": item["initial_cost"],
-            "monthly_cost": item["monthly_cost"],
-            "health":       item["health"],
-            "connections":  item["connections"],
-            "freedom":      item["freedom"],
-            "growth":       item["growth"],
-            "priority":     item.get("priority", 0),
-            "mandatory":    False,
-            "category":     item["category"],
-            "note":         item.get(note_key, ""),
-        })
-    return pd.DataFrame(rows)
-
-
-def _init_all_category_dfs(lang: str) -> dict:
-    return {cat: _build_category_df(lang, cat) for cat in CATEGORIES[lang]}
-
 
 def _collect_all_items(lang: str) -> list[dict]:
-    # Legacy implementation (moved to ui.py). Keep a tiny delegator to avoid
-    # maintaining duplicated logic in app.py.
-    return ui_mod._collect_all_items(lang)
     items = []
     for category, df in st.session_state.category_dfs.items():
         for i, row in df.iterrows():
-            items.append({
-                "name":         row["name"],
-                "initial_cost": int(st.session_state.get(f"initial_cost_{category}_{i}", int(row["initial_cost"]))),
-                "monthly_cost": int(st.session_state.get(f"monthly_cost_{category}_{i}", int(row["monthly_cost"]))),
-                "health":       int(row["health"]),
-                "connections":  int(row["connections"]),
-                "freedom":      int(row["freedom"]),
-                "growth":       int(row["growth"]),
-                "priority":     int(row["priority"]),
-                "mandatory":    bool(row["mandatory"]),
-                "category":     row["category"],
-            })
+            items.append(
+                {
+                    "name": row["name"],
+                    "initial_cost": int(
+                        st.session_state.get(
+                            f"initial_cost_{category}_{i}", int(row["initial_cost"])
+                        )
+                    ),
+                    "monthly_cost": int(
+                        st.session_state.get(
+                            f"monthly_cost_{category}_{i}", int(row["monthly_cost"])
+                        )
+                    ),
+                    "health": int(row["health"]),
+                    "connections": int(row["connections"]),
+                    "freedom": int(row["freedom"]),
+                    "growth": int(row["growth"]),
+                    "priority": int(row["priority"]),
+                    "mandatory": bool(row["mandatory"]),
+                    "category": row["category"],
+                }
+            )
     return items
 
 
-def _render_cost_summary(items: list[dict], total_budget: int, effective_monthly_budget: int, lang: str) -> bool:
-    # Legacy implementation (moved to ui.py).
-    return ui_mod._render_cost_summary(items, total_budget, effective_monthly_budget, lang)
+def _render_cost_summary(
+    items: list[dict],
+    total_budget: int,
+    effective_monthly_budget: int,
+    lang: str,
+) -> bool:
+    from lang import LANG
+
     T = LANG[lang]
-    mandatory  = [item for item in items if item["mandatory"]]
+    mandatory = [item for item in items if item["mandatory"]]
     candidates = [item for item in items if item["priority"] > 0 or item["mandatory"]]
-    m_initial  = sum(item["initial_cost"] for item in mandatory)
-    m_monthly  = sum(item["monthly_cost"]  for item in mandatory)
-    c_initial  = sum(item["initial_cost"] for item in candidates)
-    c_monthly  = sum(item["monthly_cost"]  for item in candidates)
+    m_initial = sum(item["initial_cost"] for item in mandatory)
+    m_monthly = sum(item["monthly_cost"] for item in mandatory)
+    c_initial = sum(item["initial_cost"] for item in candidates)
+    c_monthly = sum(item["monthly_cost"] for item in candidates)
 
     st.subheader(T["mandatory_summary_title"])
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric(T["must_initial"], f"${m_initial:,}",
-                delta=f"上限${total_budget:,}" if lang == "ja" else f"Limit${total_budget:,}",
-                delta_color="inverse" if m_initial > total_budget else "off")
-    col2.metric(T["must_monthly"], f"${m_monthly:,}",
-                delta=f"予算${effective_monthly_budget:,}" if lang == "ja" else f"Budget${effective_monthly_budget:,}",
-                delta_color="inverse" if m_monthly > effective_monthly_budget else "off")
+    col1.metric(
+        T["must_initial"],
+        f"${m_initial:,}",
+        delta=f"上限${total_budget:,}" if lang == "ja" else f"Limit${total_budget:,}",
+        delta_color="inverse" if m_initial > total_budget else "off",
+    )
+    col2.metric(
+        T["must_monthly"],
+        f"${m_monthly:,}",
+        delta=f"予算${effective_monthly_budget:,}" if lang == "ja" else f"Budget${effective_monthly_budget:,}",
+        delta_color="inverse" if m_monthly > effective_monthly_budget else "off",
+    )
     col3.metric(T["cand_initial"], f"${c_initial:,}")
     col4.metric(T["cand_monthly"], f"${c_monthly:,}")
 
     if m_initial > total_budget:
         st.error(T["validation_initial_over"].format(m_initial, total_budget))
     if m_monthly > effective_monthly_budget:
-        st.error(T["validation_monthly_over"].format(m_monthly, effective_monthly_budget))
+        st.error(
+            T["validation_monthly_over"].format(m_monthly, effective_monthly_budget)
+        )
 
     return m_initial > total_budget or m_monthly > effective_monthly_budget
 
 
-def _render_recommendations(all_items: list[dict], result: dict, effective_monthly_budget: int, total_budget: int, lang: str) -> None:
-    # Legacy implementation (moved to ui.py).
-    return ui_mod._render_recommendations(all_items, result, effective_monthly_budget, total_budget, lang)
+def _render_recommendations(
+    all_items: list[dict],
+    result: dict,
+    effective_monthly_budget: int,
+    total_budget: int,
+    lang: str,
+) -> None:
+    from lang import LANG
+
     T = LANG[lang]
     selected_names = {item["name"] for item in result["selected"]}
-    car_chosen     = any("車メイン" in n or "Car (Primary)" in n for n in selected_names)
-    pet_chosen     = any(n in ("ペット", "Pet") for n in selected_names)
+    car_chosen = any(
+        "車メイン" in n or "Car (Primary)" in n for n in selected_names
+    )
+    pet_chosen = any(n in ("ペット", "Pet") for n in selected_names)
 
     unselected = [
-        item for item in all_items
+        item
+        for item in all_items
         if item["name"] not in selected_names
         and item.get("priority", 0) > 0
         and not item.get("mandatory", False)
@@ -137,25 +122,27 @@ def _render_recommendations(all_items: list[dict], result: dict, effective_month
         shortfall_i = max(item["initial_cost"] - remaining_initial, 0)
         label = (
             f"優先度{item['priority']}: **{item['name']}**　初期${item['initial_cost']:,} / 月次${item['monthly_cost']:,}"
-            if lang == "ja" else
-            f"Priority {item['priority']}: **{item['name']}**　Initial${item['initial_cost']:,} / Monthly${item['monthly_cost']:,}"
+            if lang == "ja"
+            else f"Priority {item['priority']}: **{item['name']}**　Initial${item['initial_cost']:,} / Monthly${item['monthly_cost']:,}"
         )
         if shortfall_m == 0 and shortfall_i == 0:
             st.success(f"{label}　→ {T['rec_within_budget']}")
         else:
             parts = []
             if shortfall_m > 0:
-                parts.append(f"月次あと${shortfall_m:,}" if lang == "ja" else f"${shortfall_m:,}/month more")
+                parts.append(
+                    f"月次あと${shortfall_m:,}" if lang == "ja" else f"${shortfall_m:,}/month more"
+                )
             if shortfall_i > 0:
-                parts.append(f"初期費用あと${shortfall_i:,}" if lang == "ja" else f"${shortfall_i:,} more initial")
+                parts.append(
+                    f"初期費用あと${shortfall_i:,}" if lang == "ja" else f"${shortfall_i:,} more initial"
+                )
             suffix = "必要" if lang == "ja" else "needed"
             st.info(f"{label}　→ {' / '.join(parts)}{suffix}")
 
 
 def render_step1(T: dict, lang: str):
     """Render Step 1 and return inputs used by later steps."""
-    # Legacy implementation (moved to ui.py).
-    return ui_mod.render_step1(T, lang)
     st.header(T["step1"])
 
     col1, col2, col3 = st.columns(3)
@@ -219,8 +206,6 @@ def render_step1(T: dict, lang: str):
 
 def render_step2(T: dict, lang: str):
     """Render Step 2 and return weights/targets used by later steps."""
-    # Legacy implementation (moved to ui.py).
-    return ui_mod.render_step2(T, lang)
     st.header(T["step2"])
 
     col6, col7 = st.columns(2)
@@ -263,23 +248,15 @@ def render_step2(T: dict, lang: str):
 
 def render_step2_5(T: dict, lang: str, disposable_income: int, savings_period_years: int) -> dict:
     """Render Step 2.5 (lifestyle projection) and return lifestyle adjustment dict."""
-    # Legacy implementation (moved to ui.py).
-    return ui_mod.render_step2_5(T, lang, disposable_income, savings_period_years)
     st.header(T["step_lifestyle"])
 
     col_inc1, col_inc2, col_inc3 = st.columns(3)
     with col_inc1:
-        income_increase = st.number_input(
-            T["income_increase"], min_value=0, value=0, step=50
-        )
+        income_increase = st.number_input(T["income_increase"], min_value=0, value=0, step=50)
     with col_inc2:
-        income_years = st.selectbox(
-            T["income_years"], [1, 2, 3, 5, 10, 15, 20], index=2
-        )
+        income_years = st.selectbox(T["income_years"], [1, 2, 3, 5, 10, 15, 20], index=2)
     with col_inc3:
-        income_reason = st.selectbox(
-            T["income_reason"], INCOME_REASON_OPTIONS[lang]
-        )
+        income_reason = st.selectbox(T["income_reason"], INCOME_REASON_OPTIONS[lang])
 
     lifestyle_adj = calculate_lifestyle_adjustments(
         {
@@ -301,8 +278,6 @@ def render_step2_5(T: dict, lang: str, disposable_income: int, savings_period_ye
 
 def render_step3(T: dict, lang: str) -> None:
     """Render Step 3 (item editor + AI add) using Streamlit session state."""
-    # Legacy implementation (moved to ui.py).
-    return ui_mod.render_step3(T, lang)
     st.header(T["step3"])
     st.caption(T["step3_caption"])
 
@@ -385,26 +360,10 @@ def render_step3(T: dict, lang: str) -> None:
                     label_visibility="collapsed",
                     step=1,
                 )
-                mandatory = r[1].checkbox(
-                    "",
-                    key=_m_key,
-                    label_visibility="collapsed",
-                )
+                mandatory = r[1].checkbox("", key=_m_key, label_visibility="collapsed")
                 r[2].write(row["name"])
-                initial_cost = r[3].number_input(
-                    "",
-                    min_value=0,
-                    key=_ic_key,
-                    label_visibility="collapsed",
-                    step=50,
-                )
-                monthly_cost = r[4].number_input(
-                    "",
-                    min_value=0,
-                    key=_mc_key,
-                    label_visibility="collapsed",
-                    step=10,
-                )
+                initial_cost = r[3].number_input("", min_value=0, key=_ic_key, label_visibility="collapsed", step=50)
+                monthly_cost = r[4].number_input("", min_value=0, key=_mc_key, label_visibility="collapsed", step=10)
                 r[5].write(str(int(row["health"])))
                 r[6].write(str(int(row["connections"])))
                 r[7].write(str(int(row["freedom"])))
@@ -450,8 +409,7 @@ def render_step3(T: dict, lang: str) -> None:
                             ]
                         )
                         st.session_state.category_dfs[category] = pd.concat(
-                            [st.session_state.category_dfs[category], new_row],
-                            ignore_index=True,
+                            [st.session_state.category_dfs[category], new_row], ignore_index=True
                         )
                         for key, val in [
                             (f"priority_{category}_{new_idx}", 1),
@@ -482,23 +440,6 @@ def render_risk_and_results(
     w_savings: int,
     lifestyle_adj: dict,
 ) -> None:
-    """Render Risk cost, cost summary, and run/result sections."""
-    # Legacy implementation (moved to ui.py).
-    return ui_mod.render_risk_and_results(
-        T=T,
-        lang=lang,
-        age=age,
-        family=family,
-        savings_period_years=savings_period_years,
-        total_budget=total_budget,
-        target_monthly_savings=target_monthly_savings,
-        w_health=w_health,
-        w_connections=w_connections,
-        w_freedom=w_freedom,
-        w_growth=w_growth,
-        w_savings=w_savings,
-        lifestyle_adj=lifestyle_adj,
-    )
     # ── リスクコスト ──────────────────────────────────────
     use_risk = st.toggle(T["risk_toggle"], value=False)
     effective_monthly_budget = int(lifestyle_adj["future_monthly_budget"])
@@ -522,19 +463,23 @@ def render_risk_and_results(
             car_selected=car_selected,
         )
 
-        risk_df = pd.DataFrame([
-            {T["risk_col_category"]: T["risk_categories"][c["category"]], T["risk_col_cost"]: c["monthly_cost"]}
-            for c in raw_costs
-        ])
+        risk_df = pd.DataFrame(
+            [
+                {
+                    T["risk_col_category"]: T["risk_categories"][c["category"]],
+                    T["risk_col_cost"]: c["monthly_cost"],
+                }
+                for c in raw_costs
+            ]
+        )
 
         edited_risk_df = st.data_editor(
-            risk_df,
-            num_rows="fixed",
-            use_container_width=True,
-            key="risk_editor",
+            risk_df, num_rows="fixed", use_container_width=True, key="risk_editor"
         )
         total_risk = int(edited_risk_df[T["risk_col_cost"]].sum())
-        effective_monthly_budget = max(int(lifestyle_adj["future_monthly_budget"]) - total_risk, 0)
+        effective_monthly_budget = max(
+            int(lifestyle_adj["future_monthly_budget"]) - total_risk, 0
+        )
 
         st.metric(
             T["risk_effective"],
@@ -619,7 +564,7 @@ def render_risk_and_results(
                 else:
                     st.caption(T["ai_error_summary"])
 
-                if lifestyle_adj["future_note"]:
+                if lifestyle_adj.get("future_note"):
                     st.caption(lifestyle_adj["future_note"])
 
                 col_r1, col_r2, col_r3, col_r4 = st.columns(4)
@@ -687,71 +632,3 @@ def render_risk_and_results(
             else:
                 st.error(T["result_ng"])
 
-
-# ── 言語選択 ──────────────────────────────────────────
-with st.sidebar:
-    lang_choice = st.radio("🌐 Language / 言語", ["日本語", "English"], horizontal=True)
-    lang = "ja" if lang_choice == "日本語" else "en"
-    T = LANG[lang]
-    st.link_button(T["portfolio_btn"], PORTFOLIO_URL)
-    st.divider()
-
-if "items_lang" not in st.session_state or st.session_state.items_lang != lang:
-    st.session_state.items_lang    = lang
-    st.session_state.category_dfs = _init_all_category_dfs(lang)
-
-head_l, head_r = st.columns([0.78, 0.22], vertical_alignment="center")
-with head_l:
-    st.title(T["title"])
-    st.caption(T["caption"])
-with head_r:
-    st.link_button(T["portfolio_label"], PORTFOLIO_URL, use_container_width=True)
-
-# ── Step 1 ────────────────────────────────────────────
-(
-    age,
-    gender,
-    family,
-    monthly_income,
-    rent,
-    utilities,
-    internet,
-    groceries,
-    health_insurance_fixed,
-    other_fixed,
-    disposable_income,
-    total_budget,
-) = ui_mod.render_step1(T, lang)
-
-# ── Step 2 ────────────────────────────────────────────
-(
-    savings_period_years,
-    target_monthly_savings,
-    w_health,
-    w_connections,
-    w_freedom,
-    w_growth,
-    w_savings,
-) = ui_mod.render_step2(T, lang)
-
-# ── Step 2.5 ──────────────────────────────────────────
-lifestyle_adj = ui_mod.render_step2_5(T, lang, disposable_income, savings_period_years)
-
-# ── Step 3 ────────────────────────────────────────────
-ui_mod.render_step3(T, lang)
-
-ui_mod.render_risk_and_results(
-    T=T,
-    lang=lang,
-    age=int(age),
-    family=family,
-    savings_period_years=int(savings_period_years),
-    total_budget=int(total_budget),
-    target_monthly_savings=int(target_monthly_savings),
-    w_health=int(w_health),
-    w_connections=int(w_connections),
-    w_freedom=int(w_freedom),
-    w_growth=int(w_growth),
-    w_savings=int(w_savings),
-    lifestyle_adj=lifestyle_adj,
-)

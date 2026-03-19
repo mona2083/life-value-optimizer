@@ -83,7 +83,13 @@ def run_optimizer(
     model.Add(actual_savings_var == monthly_budget - total_monthly_cost_var)
 
     total_max_utility   = sum(utilities)
-    savings_coefficient = (total_max_utility * weights["savings"]) // (10 * max(monthly_budget, 1))
+    # Safety: when total utility becomes negative (e.g. after updating score ranges),
+    # the computed coefficient might also become negative, which can break CP-SAT
+    # variable bounds. Clamp it to keep the model well-formed.
+    _raw_savings_coefficient = (
+        total_max_utility * weights["savings"]
+    ) // (10 * max(monthly_budget, 1))
+    savings_coefficient = max(0, _raw_savings_coefficient)
     savings_value       = model.NewIntVar(0, monthly_budget * savings_coefficient + 1, "savings_value")
     model.Add(savings_value == actual_savings_var * savings_coefficient)
 

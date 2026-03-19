@@ -15,9 +15,9 @@ Estimate realistic values for: "{item_name}"
   "initial_cost":  <one-time USD cost, integer>,
   "monthly_cost":  <monthly USD cost, integer>,
   "health":        <physical & mental health impact, -10 to 10, integer>,
-  "connections":   <social connection & relationships score, 1-10, integer>,
-  "freedom":       <time freedom & autonomy score, 1-10, integer>,
-  "growth":        <personal growth & purpose score, 1-10, integer>
+  "connections":   <social connection & relationships score, -10 to 10, integer>,
+  "freedom":       <time freedom & autonomy score, -10 to 10, integer>,
+  "growth":        <personal growth & purpose score, -10 to 10, integer>
 }}
 """
     try:
@@ -28,7 +28,33 @@ Estimate realistic values for: "{item_name}"
         text  = response.text.strip()
         start = text.find("{")
         end   = text.rfind("}") + 1
-        return json.loads(text[start:end])
+        raw = json.loads(text[start:end])
+
+        # Normalize AI output to keep optimizer/UI consistent.
+        # - costs: clamp to >= 0
+        # - scores: clamp to -10..10 (including connections/freedom/growth)
+        def _coerce_int(v):
+            # Accept "12", 12, 12.0, etc.
+            return int(float(v))
+
+        def _clamp(x, lo, hi):
+            return max(lo, min(hi, x))
+
+        for k in ("initial_cost", "monthly_cost"):
+            if k in raw:
+                try:
+                    raw[k] = _clamp(_coerce_int(raw[k]), 0, 10**12)
+                except Exception:
+                    raw.pop(k, None)
+
+        for k in ("health", "connections", "freedom", "growth"):
+            if k in raw:
+                try:
+                    raw[k] = _clamp(_coerce_int(raw[k]), -10, 10)
+                except Exception:
+                    raw.pop(k, None)
+
+        return raw
     except Exception:
         return None
 

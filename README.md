@@ -77,6 +77,9 @@ Where item utility combines four value axes with priority-weighted bonuses, and 
 
 **Hard constraints** include budget limits (one-time + monthly), exactly one transport package, and dependency constraints (pet insurance requires pet, car insurance requires car).
 
+**Safety clamp**: the internal coefficient used to scale `savings_value` is clamped to be `>= 0`.
+This prevents CP-SAT from receiving invalid variable bounds when the total item utility can become negative (e.g., after adjusting score ranges to include `-10..10`).
+
 ---
 
 ## Project Structure
