@@ -1,6 +1,5 @@
 from ortools.sat.python import cp_model
 
-
 def _calc_priority_weights(candidates: list[dict]) -> list[float]:
     priorities = [item.get("priority", 1) for item in candidates]
     unique_p   = sorted(set(priorities))
@@ -13,15 +12,14 @@ def _calc_priority_weights(candidates: list[dict]) -> list[float]:
         weights.append(w)
     return weights
 
-
 def _base_utility(item: dict, weights: dict) -> int:
+    # 【修正】すべてのスコアに +10 を加算し、マイナス効用による無条件除外バグを防止
     return (
-        weights["health"]      * (int(item["health"]) + 10) * 100 +
-        weights["connections"] * int(item["connections"])   * 100 +
-        weights["freedom"]     * int(item["freedom"])       * 100 +
-        weights["growth"]      * int(item["growth"])        * 100
+        weights["health"]      * (int(item["health"]) + 10)      * 100 +
+        weights["connections"] * (int(item["connections"]) + 10) * 100 +
+        weights["freedom"]     * (int(item["freedom"]) + 10)     * 100 +
+        weights["growth"]      * (int(item["growth"]) + 10)      * 100
     )
-
 
 def run_optimizer(
     items: list[dict],
@@ -39,7 +37,6 @@ def run_optimizer(
         return _no_solution(monthly_budget, target_monthly_savings)
 
     n = len(candidates)
-
     priority_weights_int = [int(w * 100) for w in _calc_priority_weights(candidates)]
     base_utils           = [_base_utility(item, weights) for item in candidates]
     utilities            = [(base_utils[i] * priority_weights_int[i]) // 100 for i in range(n)]
@@ -82,9 +79,19 @@ def run_optimizer(
     actual_savings_var = model.NewIntVar(0, monthly_budget, "actual_savings")
     model.Add(actual_savings_var == monthly_budget - total_monthly_cost_var)
 
+<<<<<<< Updated upstream
     total_max_utility   = sum(utilities)
     savings_coefficient = (total_max_utility * weights["savings"]) // (10 * max(monthly_budget, 1))
     savings_value       = model.NewIntVar(0, monthly_budget * savings_coefficient + 1, "savings_value")
+=======
+    total_max_utility = sum(utilities)
+    
+    # 【修正】割り算をfloatで行い、重みが0より大きければ必ず係数が1以上になるように安全措置を追加
+    _raw_savings_coefficient = (total_max_utility * weights["savings"]) / (10 * max(monthly_budget, 1))
+    savings_coefficient = max(1 if weights["savings"] > 0 else 0, int(_raw_savings_coefficient))
+    
+    savings_value = model.NewIntVar(0, int(monthly_budget * savings_coefficient) + 1, "savings_value")
+>>>>>>> Stashed changes
     model.Add(savings_value == actual_savings_var * savings_coefficient)
 
     model.Maximize(items_value + savings_value)
@@ -111,7 +118,6 @@ def run_optimizer(
             "total_value":           solver.ObjectiveValue(),
         }
     return _no_solution(monthly_budget, target_monthly_savings)
-
 
 def _no_solution(monthly_budget: int, target_monthly_savings: int) -> dict:
     return {

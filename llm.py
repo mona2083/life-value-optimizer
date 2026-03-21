@@ -1,9 +1,9 @@
 import json
 import streamlit as st
 from google import genai
+from google.genai import types
 
 _client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-
 
 def get_item_defaults(item_name: str, lang: str) -> dict | None:
     prompt = f"""
@@ -24,14 +24,48 @@ Estimate realistic values for: "{item_name}"
         response = _client.models.generate_content(
             model="gemini-2.5-flash-lite",
             contents=prompt,
+            # 【追加】パラメータのブレをなくし、より厳密な出力を強制
+            config=types.GenerateContentConfig(temperature=0.1)
         )
         text  = response.text.strip()
         start = text.find("{")
         end   = text.rfind("}") + 1
+<<<<<<< Updated upstream
         return json.loads(text[start:end])
     except Exception:
-        return None
+=======
+        
+        # 【追加】LLMが予期せぬテキスト（謝罪やエラー文）を返した際、アプリのクラッシュを防ぐ
+        if start == -1 or end <= start:
+            return None
+            
+        raw = json.loads(text[start:end])
 
+        def _coerce_int(v):
+            return int(float(v))
+
+        def _clamp(x, lo, hi):
+            return max(lo, min(hi, x))
+
+        for k in ("initial_cost", "monthly_cost"):
+            if k in raw:
+                try:
+                    raw[k] = _clamp(_coerce_int(raw[k]), 0, 10**12)
+                except Exception:
+                    raw.pop(k, None)
+
+        for k in ("health", "connections", "freedom", "growth"):
+            if k in raw:
+                try:
+                    raw[k] = _clamp(_coerce_int(raw[k]), -10, 10)
+                except Exception:
+                    raw.pop(k, None)
+
+        return raw
+    except Exception as e:
+        print(f"LLM parsing error: {e}")
+>>>>>>> Stashed changes
+        return None
 
 def get_result_summary(
     result: dict,
@@ -73,5 +107,6 @@ Savings goal rate: {result['savings_rate']:.0%}
             contents=prompt,
         )
         return response.text.strip()
-    except Exception:
+    except Exception as e:
+        print(f"LLM summary error: {e}")
         return None
