@@ -79,11 +79,6 @@ def run_optimizer(
     actual_savings_var = model.NewIntVar(0, monthly_budget, "actual_savings")
     model.Add(actual_savings_var == monthly_budget - total_monthly_cost_var)
 
-<<<<<<< Updated upstream
-    total_max_utility   = sum(utilities)
-    savings_coefficient = (total_max_utility * weights["savings"]) // (10 * max(monthly_budget, 1))
-    savings_value       = model.NewIntVar(0, monthly_budget * savings_coefficient + 1, "savings_value")
-=======
     total_max_utility = sum(utilities)
     
     # 【修正】割り算をfloatで行い、重みが0より大きければ必ず係数が1以上になるように安全措置を追加
@@ -91,7 +86,6 @@ def run_optimizer(
     savings_coefficient = max(1 if weights["savings"] > 0 else 0, int(_raw_savings_coefficient))
     
     savings_value = model.NewIntVar(0, int(monthly_budget * savings_coefficient) + 1, "savings_value")
->>>>>>> Stashed changes
     model.Add(savings_value == actual_savings_var * savings_coefficient)
 
     model.Maximize(items_value + savings_value)

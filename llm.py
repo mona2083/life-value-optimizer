@@ -15,9 +15,9 @@ Estimate realistic values for: "{item_name}"
   "initial_cost":  <one-time USD cost, integer>,
   "monthly_cost":  <monthly USD cost, integer>,
   "health":        <physical & mental health impact, -10 to 10, integer>,
-  "connections":   <social connection & relationships score, 1-10, integer>,
-  "freedom":       <time freedom & autonomy score, 1-10, integer>,
-  "growth":        <personal growth & purpose score, 1-10, integer>
+  "connections":   <social connection & relationships score, -10 to 10, integer>,
+  "freedom":       <time freedom & autonomy score, -10 to 10, integer>,
+  "growth":        <personal growth & purpose score, -10 to 10, integer>
 }}
 """
     try:
@@ -30,10 +30,6 @@ Estimate realistic values for: "{item_name}"
         text  = response.text.strip()
         start = text.find("{")
         end   = text.rfind("}") + 1
-<<<<<<< Updated upstream
-        return json.loads(text[start:end])
-    except Exception:
-=======
         
         # 【追加】LLMが予期せぬテキスト（謝罪やエラー文）を返した際、アプリのクラッシュを防ぐ
         if start == -1 or end <= start:
@@ -64,7 +60,6 @@ Estimate realistic values for: "{item_name}"
         return raw
     except Exception as e:
         print(f"LLM parsing error: {e}")
->>>>>>> Stashed changes
         return None
 
 def get_result_summary(
